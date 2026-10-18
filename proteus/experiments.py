@@ -9,10 +9,9 @@
 * :func:`end_to_end_simulation` -- the whole system on agent-based traces
   (Figs 7-8).
 
-The "x-edge model" (x = 2, 3, 5) is interpreted as *x independent volunteer
-collections* of every edge -- "first requiring only 2 agents to verify each
-edge, and then requiring 5-agents" (Sec 5.1; Fig. 7 captions "using 2 agents
-for verification").  Points are verified with Algorithm 2 (``n_p >= 3``).
+In this simulator the "x-edge model" (x = 2, 3, 5) is *x independent volunteer
+collections* of every edge (Sec 5.1; Fig. 7, "using 2 agents for
+verification").  Points are verified with Algorithm 2 (``n_p >= 3``).
 """
 
 from __future__ import annotations

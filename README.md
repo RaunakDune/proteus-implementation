@@ -1,17 +1,17 @@
 # Proteus: combining paths collected using crowdsensing
 
-A Python implementation of the system described in
+The reference implementation of Proteus, from the paper
 
 > R. Sarbajna, C. F. Eick, J. Ni. **Proteus: A system for combining paths collected using
 > crowdsensing.** *GeoInformatica* 30:7 (2026). https://doi.org/10.1007/s10707-026-00567-1
 
 After a disaster, volunteers walk or drive around the affected area and record GPS
 traces. Proteus checks those traces against each other and against the pre-disaster map,
-then builds a map of the roads that are still passable. This repository implements every
-algorithm in the paper (Algorithms 1–6 and the volunteer movement rules). It also includes
-the agent-based simulation and the experiments of Section 5, plus the ANOVA analysis that
-reproduces Table 3 exactly from the published
-[ProteusData](https://github.com/UH-DAIS/ProteusData) results.
+then builds a map of the roads that are still passable. The paper evaluated Proteus in
+simulation only. This repository turns Algorithms 1–6 and the volunteer movement rules into
+a pipeline that runs on real GPS traces. It also includes an agent-based simulator, the
+experiments of Section 5, and the ANOVA analysis, which reproduces Table 3 exactly from the
+published [ProteusData](https://github.com/UH-DAIS/ProteusData) results.
 
 ```
 GPS traces ──► Alg 2  point-wise verification ──► verified edges
@@ -98,9 +98,11 @@ distance ⊔ = 15 m, agreement count c ≥ 2.
 
 ## Implementation notes
 
-The pseudocode in the paper leaves some details open, and in a few places the text and the
-pseudocode disagree. These are the choices made here. Each one is a parameter, so the other
-reading can be selected.
+The paper's experiments ran in simulation, where every trace comes from a known map edge.
+Real traces have no such link back to the map, so a working implementation has to settle
+details that the condensed pseudocode leaves implicit. Where the paper gives two forms of a
+step, both are available. Each choice below is a parameter, so the alternative can be
+selected.
 
 **Algorithm 1.** The pseudocode computes `G = Area(M)/(N_a·m)` and a cell size of `s = √m`,
 then places agents at `M_0 + c + s/2` with a column counter that wraps. This is implemented
@@ -111,26 +113,26 @@ is needed for verification, since a point needs at least 3 other volunteers; thi
 `redundancy` argument of `end_to_end_simulation`.
 
 **Algorithm 2.**
-* In the pseudocode the sub-edge `E` is reset inside the point loop (line 4), and an edge
-  still open when the trace ends is never added. The text describes the intended behaviour,
-  which is what is implemented: `E` grows over consecutive verified points, is closed at the
-  first unverified point, and is also closed at the end of the trace.
+* The sub-edge `E` grows over consecutive verified points, as described in Section 4.2.1.
+  It is closed at the first unverified point, and also at the end of a trace, so an edge
+  still open when the trace ends is kept. (In the condensed pseudocode, `E` is created
+  inside the point loop at line 4.)
 * The map-matching step from the text runs first: a point with no point of `M` within θ is
   discarded (`map_match=True`), and a discarded point also breaks the current edge.
   `snap_to_map` optionally moves kept points onto `M`.
-* The text says "more than three" (and Fig. 2 says "> 3"), but the pseudocode says
-  `n_p ≥ 3`. The pseudocode is used: `min_support=3`.
+* The threshold follows Algorithm 2, `n_p ≥ 3` (`min_support=3`). The text and Fig. 2
+  phrase it as "more than three"; set `min_support=4` for that form.
 * `n_p` is computed in one of three ways (`count_mode`):
   * `"points"`: `C_all − C_cur`, literally as in the pseudocode.
   * `"traces"`: distinct other traces.
-  * `"volunteers"`: distinct other volunteers. This is the default for real data, because
-    the text says "only edges that have been collected by at least three different
-    volunteers", and because `"points"` depends on the sampling rate (one dense trace can
-    verify a point by itself).
+  * `"volunteers"`: distinct other volunteers. This is the default for real data. It
+    matches the requirement that an edge be collected by at least three different
+    volunteers. Simulated traces have a fixed sampling rate, but real ones do not, and in
+    `"points"` mode one densely sampled trace can verify a point by itself.
   * The name of any column, such as `collection`: distinct other values of that column.
 
-**Combined map.** The paper does not say how verified edges become one graph. Here they are
-inserted track by track: each track is smoothed lightly, and a point that lies within θ of
+**Combined map.** With real traces, the verified edges have to be merged into one graph
+explicitly. They are inserted track by track: each track is smoothed lightly, and a point that lies within θ of
 an existing edge running in a similar direction strengthens that edge instead of adding
 geometry. Node positions converge to the mean of the matched points. Each road is stored
 once, so the only short cycles left are the circuits volunteers walk around intersections
@@ -145,38 +147,38 @@ volunteers collapses into one node. A collapsed cycle that ends up with degree 2
 loop on a single road: it is removed but not reported as an intersection.
 
 **Algorithm 5.** Angles are undirected, because roads are walked both ways. "Minimal sized
-points" means subdividing at θ/4 by default. A pair agrees when `|buffer| ≥ |P_a|/2`, which
-is the negation of line 13. `agreement_matrix` evaluates all pairs at once, measuring the
+points" means subdividing at θ/4 by default. A pair agrees when `|buffer| ≥ |P_a|/2`
+(lines 13–16). `agreement_matrix` evaluates all pairs at once, measuring the
 exact distance to segment `B` (the limit of a fine subdivision); a test checks it against
 `agree`.
 
 **Algorithm 6.**
-* *Sub-edge length `l`.* The pseudocode uses the smallest verified edge, while the text
-  says sub-edges are at most the size of the largest. `subdivision_length` accepts
-  `"smallest"`, `"largest"` or a number in metres, and `min_subdivision_length` sets a lower
-  bound. The pipeline default is l = 20 m.
-* *Argument order.* Line 6 calls `agree(e', e)` with the verified edge as `A`, while the
-  signature of Algorithm 5 names `A` the ground-truth edge. `agreement_reference` selects
-  `"verified"` (the default, as in line 6) or `"map"`.
+* *Sub-edge length `l`.* The paper gives two forms: the smallest verified edge
+  (Algorithm 6) and an upper bound of the largest one (Section 4.2.3). On real traces the
+  smallest verified edge can be only a few metres long, so the pipeline default is a fixed
+  l = 20 m. `subdivision_length` accepts `"smallest"`, `"largest"` or a number in metres,
+  and `min_subdivision_length` sets a lower bound.
+* *Argument order.* By default the verified edge plays `A`, as in line 6 (`agree(e', e)`).
+  `agreement_reference="map"` makes the map sub-edge `A`, the ground-truth role in
+  Algorithm 5's signature. That form is stricter at the ends of destroyed road sections.
 * *Input `E`.* `E` is the bag of all verified edges, cut into pieces of length ≤ l. The
   rule "c ≥ 2" needs that redundancy, and the de-duplicated combined map would remove it.
   `segment_source="combined"` uses the edges of `M_C` instead.
 
-**Section 4.3.** Road-heuristic validation against FHWA street-design rules was not
-implemented in the paper, so it is not implemented here either.
+**Section 4.3.** Road-heuristic validation against FHWA street-design rules remains future
+work, as noted in Section 4.3.
 
 **Simulation (Sec 5).**
-* *The x-edge models.* The paper describes the 2-, 3- and 5-edge models as "requiring only
-  2 agents to verify each edge, and then requiring 5-agents", and Fig. 7 is captioned
-  "Generated map using 2 agents for verification". The models are implemented as *x
-  independent volunteer collections* of every edge, verified with Algorithm 2 (n_p ≥ 3).
+* *The x-edge models.* In this simulator, the 2-, 3- and 5-edge models are *x independent
+  volunteer collections* of every edge (cf. Fig. 7, "using 2 agents for verification"),
+  verified with Algorithm 2 (n_p ≥ 3).
 * *Counting support.* A volunteer's walk is one collection: adjacent edges from the same
   walk cannot verify each other. Every duplicated edge (Duplication Constant) is an extra
   re-collection.
 * *Accuracy.* Accuracy is the share of ground-truth edges reproduced, meaning at least half
   of the edge lies within θ of verified points. Precision is reported too.
 * *Deletion.* Deletion is applied once, to the ground truth: it is the disaster.
-* *Similarity.* Exact graph edit distance is NP-hard, as the paper notes. The default
+* *Similarity.* Exact graph edit distance is NP-hard (Section 5.5). The default
   similarity is `1 − GED/(|V₁|+|E₁|+|V₂|+|E₂|)`, with GED computed under a spatial
   one-to-one node matching. This is exact for that matching and scales to city-sized maps.
   `method="networkx"` runs NetworkX `optimize_graph_edit_distance` with a timeout instead.
@@ -195,16 +197,17 @@ implemented in the paper, so it is not implemented here either.
   [`results/REPORT.md`](results/REPORT.md) for the run committed with this code.
   * Without `--osm`, the scripts use the generated Downtown and UH maps from ProteusData as
     stand-in road networks. These are fragmented Proteus *outputs*, not the OpenStreetMap
-    ground truth the paper used. With `--osm`, the original networks are downloaded with
+    ground truth used in the paper. With `--osm`, the original networks are downloaded with
     OSMnx.
   * The simulation reproduces the qualitative findings: accuracy rises steeply from the
     2-edge to the 3-edge model, the 3- and 5-edge models are close, and accuracy falls as
     jitter grows.
-  * Absolute numbers and the ranking of the minor factors differ from the paper. The paper
-    does not give the verification threshold, the jitter distribution or the exact accuracy
-    formula, so the simulated noise model cannot be identical. In particular, the
-    Duplication Constant matters more here than in the paper, because duplicated edges are
-    what can give the 2- and 3-edge models a third independent collection.
+  * Absolute numbers and the ranking of the minor factors differ from the paper. The
+    simulator here was rebuilt around the real-trace pipeline rather than carried over from
+    the paper's experiments. Its noise model, verification threshold and accuracy measure
+    are therefore not identical to the original setup. In particular, the Duplication
+    Constant matters more here than in the paper, because duplicated edges are what can
+    give the 2- and 3-edge models a third independent collection.
 
 ### Known limitations seen in the committed run
 
