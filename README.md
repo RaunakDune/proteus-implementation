@@ -229,3 +229,7 @@ pytest -q
 The tests cover each algorithm against small hand-built cases, check the vectorised
 support counting against brute force, check `agreement_matrix` against `agree`, and run the
 full pipeline, the experiments, the Table 3 reproduction and the CLI.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
