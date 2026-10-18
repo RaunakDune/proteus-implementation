@@ -206,6 +206,20 @@ implemented in the paper, so it is not implemented here either.
     Duplication Constant matters more here than in the paper, because duplicated edges are
     what can give the 2- and 3-edge models a third independent collection.
 
+### Known limitations seen in the committed run
+
+* **Deployment results on the stand-in maps.** The stand-in Downtown map breaks into
+  hundreds of small pieces, so its largest connected component is tiny. Its Table-5 row in
+  `results/REPORT.md` is therefore not meaningful. Use `--osm` or a synthetic grid for
+  deployment studies.
+* **Short destroyed sections can stay in the map.** A destroyed road section shorter than
+  about 3θ (≈ 30 m at θ = 10 m) cannot be told apart from GPS noise around its two intact
+  ends. Part of such a section often survives Algorithm 6; this is reported as
+  `destroyed_length_kept_%`. Long destroyed sections are removed.
+* **Low coverage means missing roads.** Roads that fewer than four distinct volunteers
+  walked stay unverified (n_p ≥ 3 other volunteers). In the end-to-end runs, recall
+  follows the 3-agent coverage closely.
+
 ## Tests
 
 ```bash
