@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+proteus_out/
+proteus_sim/
+post_disaster_map.csv
+*.log
